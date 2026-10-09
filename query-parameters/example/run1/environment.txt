@@ -1,0 +1,5 @@
+server_version 19beta2
+rows 3000000
+table_size 377 MB
+rounds 15
+param_steps 1 10 100 1000 10000 32000 65000

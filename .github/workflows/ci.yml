@@ -1,0 +1,92 @@
+name: CI
+
+# What this CI can and cannot show.
+#
+# A hosted runner does NOT reproduce any number in the READMEs: its CPUs and disks
+# are shared and virtualized, and the loads here are tiny on purpose. This is a
+# functional smoke of each chapter's HARNESS: the scripts are lint-clean and, on a
+# small load, every stage runs end to end and writes its output (the hard limits
+# are still triggered for real, because they do not depend on the hardware).
+# Real numbers need real hardware.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: for f in */*.sh; do bash -n "$f"; done
+      - name: shellcheck
+        run: shellcheck */*.sh
+      - name: python syntax
+        run: python3 -m py_compile */*.py
+
+  query-parameters:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [17, 18]
+    env:
+      WORKDIR: ${{ github.workspace }}/param-limits-work
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL ${{ matrix.pg }} from PGDG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }} libpq-dev
+
+      - name: Functional smoke (tiny load; the timings mean nothing here)
+        env:
+          PG_CONFIG: /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+          ROWS: 100000
+          ROUNDS: 3
+          PARAM_STEPS: 1 10 100 1000
+          WALL_ARRAY: 1000000
+          SHARED_BUFFERS: 128MB
+        run: ./query-parameters/param_limits.sh | tee smoke-output.txt
+
+      - name: Check that every stage produced output
+        run: |
+          # (B) the wall is hardware-independent, so it is checked for real:
+          # 65,535 goes through, 65,536 is refused by libpq and by the server
+          grep -q '^wall n_params=65535 status=ok' "$WORKDIR/wall.txt"
+          grep -q '^wall n_params=65536 status=error' "$WORKDIR/wall.txt"
+          grep -q '^wire n_params=65535 bind_count_field=65535 status=ok' "$WORKDIR/wall.txt"
+          grep -q '^wire n_params=65536 bind_count_field=0 status=error sqlstate=08P01' "$WORKDIR/wall.txt"
+          grep -q '^bigarray n_params=1 elements=1000000 .*status=ok' "$WORKDIR/wall.txt"
+          # (A) 4 lookup points + 3 insert points, 2 approaches, 3 rounds, plus the header
+          test "$(wc -l < "$WORKDIR/raw.csv")" -eq $(( (4 + 3) * 2 * 3 + 1 ))
+          awk -F, 'NR > 1 && ($6 + 0 < 0 || $7 + 0 < 0 || $8 + 0 <= 0) { bad = 1 } END { exit bad }' "$WORKDIR/raw.csv"
+          grep -q '(C) Practical crossover' smoke-output.txt
+          test -s "$WORKDIR/summary.csv"
+          test -s "$WORKDIR/params.svg"
+
+      - name: Keep the smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: query-parameters-pg${{ matrix.pg }}
+          path: |
+            smoke-output.txt
+            param-limits-work/*.csv
+            param-limits-work/*.txt
+            param-limits-work/params.svg
+            param-limits-work/server.log
+          if-no-files-found: warn

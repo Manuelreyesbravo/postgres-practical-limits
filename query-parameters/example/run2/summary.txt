@@ -1,0 +1,32 @@
+(A) Cost curve: median ms over 15 rounds, [95% CI]
+
+  lookup: IN ($1..$N)  vs  = ANY($1::bigint[])
+       N |               capped total     plan     exec |            one-param total     plan     exec | ratio
+       1 |     0.019 [0.012..0.030]      0.003    0.001 |     0.024 [0.014..0.031]     0.003    0.001 | 0.79x
+      10 |     0.026 [0.023..0.088]      0.004    0.006 |     0.079 [0.022..0.104]     0.003    0.007 | 0.33x
+     100 |     0.151 [0.122..0.580]      0.013    0.073 |     0.490 [0.099..0.556]     0.009    0.077 | 0.31x
+    1000 |     1.185 [1.067..2.904]      0.097    0.689 |     2.415 [0.897..2.869]     0.059    0.779 | 0.49x
+   10000 |      22.7 [22.4..22.9]        0.971     18.7 |      20.5 [20.2..21.4]       0.585     18.0 | 1.11x
+   32000 |      52.8 [52.5..53.3]        3.101     40.6 |      47.6 [47.1..47.9]       1.823     40.2 | 1.11x
+   65000 |      76.6 [75.9..77.8]        6.193     52.6 |      66.0 [65.8..67.6]       3.631     52.5 | 1.16x
+
+  insert: VALUES ($1,$2),.. (N params)  vs  unnest($1, $2) (2 params)
+       N |               capped total     plan     exec |            one-param total     plan     exec | ratio
+      10 |     0.129 [0.122..0.141]      0.011    0.063 |     0.161 [0.152..0.169]     0.016    0.070 | 0.80x
+     100 |     0.170 [0.155..0.175]      0.013    0.086 |     0.177 [0.174..0.196]     0.015    0.091 | 0.96x
+    1000 |     0.701 [0.675..0.787]      0.041    0.418 |     0.542 [0.529..0.575]     0.016    0.419 | 1.29x
+   10000 |     5.568 [5.412..5.752]      0.319    3.419 |     3.797 [3.746..3.857]     0.024    3.420 | 1.47x
+   32000 |      17.6 [17.1..18.2]        0.984     10.9 |      11.9 [11.7..12.6]       0.036     10.7 | 1.48x
+   65000 |      35.3 [34.9..35.8]        2.064     22.4 |      24.5 [24.3..24.8]       0.054     22.1 | 1.44x
+
+(B) The hard wall
+  wall n_params=65535 status=ok matched=64812 ms=97.8
+  wall n_params=65536 status=error message="number of parameters must be between 0 and 65535"
+  wire n_params=65535 bind_count_field=65535 status=ok matched=64812
+  wire n_params=65536 bind_count_field=0 status=error sqlstate=08P01 message="bind message supplies 0 parameters, but prepared statement "" requires 65536"
+  bigarray n_params=1 elements=2000000 param_bytes=15257698 status=ok matched=1459167 ms=956.6
+
+(C) Practical crossover: smallest N from which the one-parameter form
+    stays faster at every larger N tested
+  lookup: by median N=10,000; with non-overlapping 95% CIs N=10,000
+  insert: by median N=1,000; with non-overlapping 95% CIs N=1,000

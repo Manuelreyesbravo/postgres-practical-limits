@@ -1,0 +1,5 @@
+wall n_params=65535 status=ok matched=64812 ms=97.8
+wall n_params=65536 status=error message="number of parameters must be between 0 and 65535"
+wire n_params=65535 bind_count_field=65535 status=ok matched=64812
+wire n_params=65536 bind_count_field=0 status=error sqlstate=08P01 message="bind message supplies 0 parameters, but prepared statement "" requires 65536"
+bigarray n_params=1 elements=2000000 param_bytes=15257698 status=ok matched=1459167 ms=956.6
