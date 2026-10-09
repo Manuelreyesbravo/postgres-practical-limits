@@ -106,8 +106,9 @@ q "CREATE TABLE t (id bigint PRIMARY KEY, payload text)"
 q "INSERT INTO t SELECT g, md5(g::text) || md5((g + 1)::text) FROM generate_series(1, $ROWS) g"
 q "CREATE TABLE ins (id bigint PRIMARY KEY, payload text)"
 q "VACUUM ANALYZE t"
-q "CREATE EXTENSION IF NOT EXISTS pg_prewarm" 2>/dev/null &&
-  q "SELECT pg_prewarm('t'), pg_prewarm('t_pkey')" >/dev/null || true
+if q "CREATE EXTENSION IF NOT EXISTS pg_prewarm" 2>/dev/null; then
+  q "SELECT pg_prewarm('t'), pg_prewarm('t_pkey')" >/dev/null
+fi
 {
   echo "server_version $(q 'show server_version')"
   echo "rows $ROWS"
